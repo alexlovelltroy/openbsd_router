@@ -1,0 +1,186 @@
+---
+- hosts: all
+  gather_facts: false
+  remote_user: root
+
+  vars:
+    mirror: "https://fastly.cdn.openbsd.org/pub/OpenBSD"
+    release: '6.3'
+#   https://www.openbsd.org/anoncvs.html
+    cvs: 'anoncvs@mirror.osn.de:/cvs'
+    github_user: "alexlovelltroy"
+    developer_username: "alt"
+    developer_realname: "Alex Lovell-Troy"
+    developer_email: "alex@lovelltroy.org"
+    pkg_path: "{{ mirror }}/{{ release }}/packages/amd64/"
+
+  tasks:
+  - name: add a new user
+    user: name="{{ developer_username }}" comment="{{ developer_realname }}" groups=wheel,wsrc append=yes
+    become_method: sudo
+    become: true
+
+  - name: ensure root SSH keys are installed
+    authorized_key: user=root key=https://github.com/{{ github_user }}.keys
+    become_method: sudo
+    become: true
+
+  - name: ensure user SSH keys are installed
+    authorized_key: user="{{ developer_username }}" key=https://github.com/{{ github_user }}.keys
+    become_method: sudo
+    become: true
+
+  - name: /etc/doas.conf
+    blockinfile:
+      dest: /etc/doas.conf
+      create: yes
+      block: |
+        permit nopass keepenv setenv { ENV PS1 SSH_AUTH_SOCK } :wheel
+        permit nopass keepenv setenv { ENV PS1 SSH_AUTH_SOCK } :wsrc
+    become_method: sudo
+    become: true
+  
+  - name: setup package mirror
+    blockinfile:
+      dest: /etc/installurl
+      create: yes
+      block: |
+        {{ mirror }}
+    become_method: doas
+    become: true
+
+  - name: install packages
+    openbsd_pkg: name={{ item }} state=present
+    with_items:
+        - git
+        - gmake
+        - mc
+        - vim--no_x11
+        - py-pip
+        - openvpn-2.4.5p1
+        - screen-4.0.3p6
+        - go
+        - go-tools
+        - zsh
+        - mutt-1.9.4v3
+        - gnupg-1.4.22p1
+
+    become_method: doas
+    become: true    
+
+  - name: .gitconfig
+    blockinfile:
+      dest: /home/{{ developer_username }}/.gitconfig
+      create: yes
+      owner: "{{ developer_username }}"
+      block: |
+        [user]
+                name = {{ developer_realname }}
+                email = {{ developer_email }}
+
+        [push]
+                default = simple
+
+        [color]
+                ui = true
+    become_method: doas
+    become: true
+
+
+  - name: checkout Jess's dotfiles dotfiles
+    git:
+      repo: https://github.com/jessfraz/dotfiles.git
+      dest: "/home/{{ developer_username }}/dotfiles"
+      track_submodules: yes
+      recursive: yes
+      clone: yes
+      update: yes
+    become_method: doas
+    become: true
+
+  - name: .extra
+    blockinfile:
+      dest: /home/{{ developer_username }}/.extra
+      create: yes
+      owner: "{{ developer_username }}"
+      block: |
+        ###
+        ### Git credentials
+        ###
+
+        GIT_AUTHOR_NAME="{{ developer_realname }}"
+        GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+        git config --global user.name "$GIT_AUTHOR_NAME"
+        GIT_AUTHOR_EMAIL="{{ developer_email }}"
+        GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+        git config --global user.email "$GIT_AUTHOR_EMAIL"
+        GH_USER="{{ github_user }}"
+        git config --global github.user "$GH_USER"
+
+        ###
+        ### Gmail credentials for mutt
+        ###
+        export GMAIL={{ developer_email }}
+        export GMAIL_NAME="{{ developer_realname }}"
+        export GMAIL_FROM={{ developer_email }}
+    become_method: doas
+    become: true
+
+
+  - name: checkout Jess's vim config
+    git:
+      repo: https://github.com/jessfraz/.vim.git
+      dest: "/home/{{ developer_username }}/.vim"
+      track_submodules: yes
+      recursive: yes
+      clone: yes
+      update: yes
+      force: yes
+    become_method: doas
+    become: true
+
+      
+  - name: Update .vimrc
+    file:
+      src: /home/{{ developer_username }}/.vim/vimrc
+      dest: /home/{{ developer_username }}/.vimrc
+      owner: "{{ developer_username }}"
+      group: "{{ developer_username }}"
+      state: link
+    become_method: doas
+    become: true
+
+
+  - name: /etc/installurl
+    lineinfile:
+      dest=/etc/pkg.conf
+      backup=yes
+      line="{{ pkg_path }}"
+      state=present
+      create=True
+    become_method: doas
+    become: true
+
+  - name: checkout OpenBSD sources (ports)
+    git:
+      repo: https://github.com/openbsd/{{ item.component }}
+      dest: "{{ item.path }}"
+      accept_hostkey: yes
+      clone: yes
+      update: yes
+    with_items:
+      #- { component: 'src', path: '/usr/src' }
+      - { component: 'ports', path: '/usr/ports' }
+    become: true
+    become_method: doas
+    become_username: alt
+
+  - name: make 'wsrc' owner of ports
+    file:
+      path: /usr/ports
+      mode: u=rwX,g=rwX,o=rX
+      group: wsrc
+      recurse: yes
+    become_method: doas
+    become: true
+
