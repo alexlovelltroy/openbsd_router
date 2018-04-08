@@ -184,3 +184,18 @@
     become_method: doas
     become: true
 
+  - name: Get the generator for our dns/dhcp files
+    git:
+      repo: https://github.com/alexlovelltroy/gendomains.git
+      dest: /tmp/gendomains
+      clone: yes
+      update: yes
+    become: true
+    become_method: doas
+    become_username: alt
+
+  - name: Use the generator to create our zone files and dhcpd
+    command: /tmp/gendomains/generate_zonefile.py Oren_Tirosh_Wordlist.txt internal.lovelltroy.net chdir=/tmp/gendomains/ creates=/tmp/gendomains/dhcpd.conf
+    become: true
+    become_method: doas
+    become_username: root
