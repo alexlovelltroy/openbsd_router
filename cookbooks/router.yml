@@ -199,3 +199,33 @@
     become: true
     become_method: doas
     become_username: root
+
+  - name: Enable ip forwarding
+    command: echo 'net.inet.ip.forwarding=1' >> /etc/sysctl.conf
+    become: true
+    become_method: doas
+    become_username: root
+
+  - name: Enable unbound
+    command: rcctl enable unbound
+    become: true
+    become_username: root
+    become_method: doas
+
+  - name: Enable nsd
+    command: rcctl enable nsd
+    become: true
+    become_username: root
+    become_method: doas
+
+  - name: Enable tftpd
+    command: rcctl enable tftpd
+    become: true
+    become_username: root
+    become_method: doas
+
+  - name: Enable dhcpd
+    command: rcctl enable dhcpd
+    become: true
+    become_username: root
+    become_method: doas
