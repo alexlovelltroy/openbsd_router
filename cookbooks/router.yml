@@ -6,8 +6,6 @@
   vars:
     mirror: "https://fastly.cdn.openbsd.org/pub/OpenBSD"
     release: '6.3'
-#   https://www.openbsd.org/anoncvs.html
-    cvs: 'anoncvs@mirror.osn.de:/cvs'
     github_user: "alexlovelltroy"
     developer_username: "alt"
     developer_realname: "Alex Lovell-Troy"
