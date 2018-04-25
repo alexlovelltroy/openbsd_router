@@ -1,7 +1,7 @@
 ---
 - hosts: all
   gather_facts: false
-  remote_user: root
+  remote_user: vagrant
 
   vars:
     mirror: "https://fastly.cdn.openbsd.org/pub/OpenBSD"
@@ -11,6 +11,7 @@
     developer_realname: "Alex Lovell-Troy"
     developer_email: "alex@lovelltroy.org"
     pkg_path: "{{ mirror }}/{{ release }}/packages/amd64/"
+    internal_domain: "placeholder"
 
   tasks:
   - name: add a new user
@@ -159,29 +160,6 @@
     become_method: doas
     become: true
 
-  - name: checkout OpenBSD sources (ports)
-    git:
-      repo: https://github.com/openbsd/{{ item.component }}
-      dest: "{{ item.path }}"
-      accept_hostkey: yes
-      clone: yes
-      update: yes
-    with_items:
-      #- { component: 'src', path: '/usr/src' }
-      - { component: 'ports', path: '/usr/ports' }
-    become: true
-    become_method: doas
-    become_username: alt
-
-  - name: make 'wsrc' owner of ports
-    file:
-      path: /usr/ports
-      mode: u=rwX,g=rwX,o=rX
-      group: wsrc
-      recurse: yes
-    become_method: doas
-    become: true
-
   - name: Get the generator for our dns/dhcp files
     git:
       repo: https://github.com/alexlovelltroy/gendomains.git
@@ -198,17 +176,49 @@
     become_method: doas
     become_username: root
 
-  - name: Enable ip forwarding
-    command: echo 'net.inet.ip.forwarding=1' >> /etc/sysctl.conf
+  - name: Discover what the domain name is
+    shell: grep -w domain-name /tmp/gendomains/dhcpd.conf | grep -v servers |awk '{ print $3}' | sed 's/[\;"]//g'
+    register: internal_domain
+
+  - name: Discover what the octet is
+    shell: grep subnet /tmp/gendomains/dhcpd.conf | awk '{ print $2}' | sed s/192.168.//g | cut -f1 -d"."
+    register: random_octet
+
+  - name: Set the domain facts
+    set_fact:
+      internal_domain: "{{ internal_domain.stdout }}" 
+      random_octet: "{{ random_octet.stdout }}"
+
+  - name: Enable dhcpd
+    command: rcctl enable dhcpd
     become: true
-    become_method: doas
     become_username: root
+    become_method: doas
+
+  - name: Template the unbound configuration file
+    template:
+      src: etc_files/unbound.conf.j2
+      dest: /var/unbound/etc/unbound.conf
+      owner: root
+      group: wheel
+      mode: 0644
 
   - name: Enable unbound
     command: rcctl enable unbound
     become: true
     become_username: root
     become_method: doas
+
+  - name: Template the nsd configuration file
+    template:
+      src: etc_files/nsd.conf.j2
+      dest: /var/nsd/etc/unbound.conf
+      owner: root
+      group: _nsd
+      mode: 0644
+
+  - name: Move the zone files in to place
+    command: "/bin/sh -c 'cp /tmp/gendomains/*.zone /var/nsd/zones/'"
 
   - name: Enable nsd
     command: rcctl enable nsd
@@ -222,8 +232,8 @@
     become_username: root
     become_method: doas
 
-  - name: Enable dhcpd
-    command: rcctl enable dhcpd
+  - name: Enable ip forwarding
+    command: echo 'net.inet.ip.forwarding=1' >> /etc/sysctl.conf
     become: true
-    become_username: root
     become_method: doas
+    become_username: root
