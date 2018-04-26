@@ -1,0 +1,86 @@
+  - name: Enable ip forwarding
+    command: echo 'net.inet.ip.forwarding=1' >> /etc/sysctl.conf
+    become: true
+    become_method: doas
+
+  - name: Template the pf configuration file
+    template:
+      src: etc_files/pf.conf.j2
+      dest: /etc/pf.conf
+      owner: root
+      group: wheel
+      mode: 0644
+
+  - name: Get the route monitoring tool
+    git:
+      repo: https://github.com/alexlovelltroy/openbsd-rrdmon.git
+      dest: /var/rrdmon
+      clone: yes
+      update: yes
+    become: true
+    become_method: doas
+
+  - block:
+    - name: "Checking folders"
+      stat:
+       path: "{{item}}"
+      register: folder_stats
+      with_items:
+      - ["/var/db/rrd/pfstats","/var/db/rrd/health"]
+    - name: "Creating multiple folders without disturbing previous permissions"
+      file:
+       path: "{{item.item}}"
+       state: directory
+       mode: 0755
+       group: root
+       owner: root
+      when: item.stat.exists == false
+      with_items:
+      - "{{folder_stats.results}}"    
+
+  - name: Initialize the pfstats database
+    command: /var/rrdmon/pfstats/initialize_database.sh
+
+  - name: Initialize the health database
+    command: /var/rrdmon/health/initialize_database.sh
+
+  - name: Create the cron job to update the pfstats database 
+     cron: 
+       job: "/var/rrdmon/pfstats/update_database.sh > /dev/null"
+
+  - name: Create the cron job to update the health database 
+     cron: 
+       job: "/var/rrdmon/health/update_database.sh > /dev/null"
+
+  - name: Create the cron job to update the pfstats graph 
+     cron: 
+       job: "/var/rrdmon/pfstats/create_graphs.sh > /dev/null"
+
+  - name: Create the cron job to update the health graphs 
+     cron: 
+       job: "/var/rrdmon/health/create_graphs.sh > /dev/null"
+
+  - name: Create the hostname files for em1,em2,em3,bridge0
+      copy: src=etc_files/{{ item }} dest=/etc/{{ item }} force=no
+      with_items:
+        - etc_files/hostname.em1
+        - etc_files/hostname.em2
+        - etc_files/hostname.em3
+        - etc_files/hostname.bridge0
+        
+  - name: Template the pflow interface
+      template:
+        src: etc_files/hostname.pflow0.j2
+        dest: /etc/hostname.pflow0
+        owner: root
+        group: wheel
+        mode: 0644
+
+  - name: Template the vether interface
+      template:
+        src: etc_files/hostname.vether0.j2
+        dest: /etc/hostname.vether0
+        owner: root
+        group: wheel
+        mode: 0644
+

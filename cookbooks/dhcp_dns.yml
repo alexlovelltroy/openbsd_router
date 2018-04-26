@@ -1,0 +1,65 @@
+  - name: Get the generator for our dns/dhcp files
+    git:
+      repo: https://github.com/alexlovelltroy/gendomains.git
+      dest: /tmp/gendomains
+      clone: yes
+      update: yes
+    become: true
+    become_method: doas
+    become_username: alt
+
+  - name: Use the generator to create our zone files and dhcpd
+    command: /tmp/gendomains/generate_zonefile.py Oren_Tirosh_Wordlist.txt internal.lovelltroy.net chdir=/tmp/gendomains/ creates=/tmp/gendomains/dhcpd.conf
+    become: true
+    become_method: doas
+    become_username: root
+
+  - name: Discover what the domain name is
+    shell: grep -w domain-name /tmp/gendomains/dhcpd.conf | grep -v servers |awk '{ print $3}' | sed 's/[\;"]//g'
+    register: internal_domain
+
+  - name: Discover what the octet is
+    shell: grep subnet /tmp/gendomains/dhcpd.conf | awk '{ print $2}' | sed s/192.168.//g | cut -f1 -d"."
+    register: random_octet
+
+  - name: Set the domain facts
+    set_fact:
+      internal_domain: "{{ internal_domain.stdout }}" 
+      random_octet: "{{ random_octet.stdout }}"
+
+  - name: Enable dhcpd
+    command: rcctl enable dhcpd
+    become: true
+    become_username: root
+    become_method: doas
+
+  - name: Template the unbound configuration file
+    template:
+      src: etc_files/unbound.conf.j2
+      dest: /var/unbound/etc/unbound.conf
+      owner: root
+      group: wheel
+      mode: 0644
+
+  - name: Enable unbound
+    command: rcctl enable unbound
+    become: true
+    become_username: root
+    become_method: doas
+
+  - name: Template the nsd configuration file
+    template:
+      src: etc_files/nsd.conf.j2
+      dest: /var/nsd/etc/unbound.conf
+      owner: root
+      group: _nsd
+      mode: 0644
+
+  - name: Move the zone files in to place
+    command: "/bin/sh -c 'cp /tmp/gendomains/*.zone /var/nsd/zones/'"
+
+  - name: Enable nsd
+    command: rcctl enable nsd
+    become: true
+    become_username: root
+    become_method: doas

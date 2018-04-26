@@ -15,7 +15,7 @@ server:
     rrset-roundrobin: yes
     use-caps-for-id: yes
     tls-upstream: yes
-    local-zone: {{ random_octet }}.168.192.in-addr.arpa." nodefault
+    local-zone: "{{ random_octet }}.168.192.in-addr.arpa." nodefault
 
 forward-zone:
         name: "."

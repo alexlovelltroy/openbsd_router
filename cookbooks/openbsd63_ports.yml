@@ -1,0 +1,44 @@
+  - name: create a directory for the sources
+    file: path=/tmp/sources/{{ release }} state=directory
+
+  - name: download release sources ports.tar.gz
+    get_url:
+       url: "{{ mirror }}/{{ release }}/{{ item.component }}.tar.gz"
+       dest: /tmp/sources/{{ release }}/
+       mode: 0440
+       sha256sum: "{{ item.cksum }}"
+    with_items:
+      - { component: 'ports', cksum: '4cfe1792dde4559d91d4cfdc88d5b7d838553300c4057cffe9247540aa38f644' }
+
+  - name: checkout OpenBSD sources (ports)
+    git:
+      repo: https://github.com/openbsd/{{ item.component }}
+      dest: "{{ item.path }}"
+      accept_hostkey: yes
+      clone: yes
+      update: yes
+    with_items:
+      - { component: 'src', path: '/usr/src' }
+      - { component: 'ports', path: '/usr/ports' }
+    become: true
+    become_method: doas
+
+  - name: make 'wsrc' owner of ports
+    file:
+      path: /usr/ports
+      mode: u=rwX,g=rwX,o=rX
+      group: wsrc
+      recurse: yes
+    become_method: doas
+    become: true
+
+  - name: add PORTSDIR_PATH and SIGNING_PARAMETERS to /etc/mk.conf
+    blockinfile:
+      dest: /etc/mk.conf
+      content: |
+        SIGNING_PARAMETERS=-s signify -s /etc/signify/my-pkg.sec 
+      backup: yes
+      state: present
+      create: True
+    become_method: doas
+    become: true

@@ -1,0 +1,92 @@
+
+  - name: add a new user
+    user: name="{{ developer_username }}" comment="{{ developer_realname }}" groups=wheel,wsrc append=yes
+    become_method: sudo
+    become: true
+
+  - name: ensure user SSH keys are installed
+    authorized_key: user="{{ developer_username }}" key=https://github.com/{{ github_user }}.keys
+    become_method: sudo
+    become: true
+
+  - name: .gitconfig
+    blockinfile:
+      dest: /home/{{ developer_username }}/.gitconfig
+      create: yes
+      owner: "{{ developer_username }}"
+      block: |
+        [user]
+                name = {{ developer_realname }}
+                email = {{ developer_email }}
+
+        [push]
+                default = simple
+
+        [color]
+                ui = true
+    become_method: doas
+    become: true
+
+
+  - name: checkout Jess's dotfiles dotfiles
+    git:
+      repo: https://github.com/jessfraz/dotfiles.git
+      dest: "/home/{{ developer_username }}/dotfiles"
+      track_submodules: yes
+      recursive: yes
+      clone: yes
+      update: yes
+    become_method: doas
+    become: true
+
+  - name: .extra
+    blockinfile:
+      dest: /home/{{ developer_username }}/.extra
+      create: yes
+      owner: "{{ developer_username }}"
+      block: |
+        ###
+        ### Git credentials
+        ###
+
+        GIT_AUTHOR_NAME="{{ developer_realname }}"
+        GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+        git config --global user.name "$GIT_AUTHOR_NAME"
+        GIT_AUTHOR_EMAIL="{{ developer_email }}"
+        GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+        git config --global user.email "$GIT_AUTHOR_EMAIL"
+        GH_USER="{{ github_user }}"
+        git config --global github.user "$GH_USER"
+
+        ###
+        ### Gmail credentials for mutt
+        ###
+        export GMAIL={{ developer_email }}
+        export GMAIL_NAME="{{ developer_realname }}"
+        export GMAIL_FROM={{ developer_email }}
+    become_method: doas
+    become: true
+
+
+  - name: checkout Jess's vim config
+    git:
+      repo: https://github.com/jessfraz/.vim.git
+      dest: "/home/{{ developer_username }}/.vim"
+      track_submodules: yes
+      recursive: yes
+      clone: yes
+      update: yes
+      force: yes
+    become_method: doas
+    become: true
+
+      
+  - name: Update .vimrc
+    file:
+      src: /home/{{ developer_username }}/.vim/vimrc
+      dest: /home/{{ developer_username }}/.vimrc
+      owner: "{{ developer_username }}"
+      group: "{{ developer_username }}"
+      state: link
+    become_method: doas
+    become: true

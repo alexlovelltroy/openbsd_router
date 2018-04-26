@@ -14,18 +14,8 @@
     internal_domain: "placeholder"
 
   tasks:
-  - name: add a new user
-    user: name="{{ developer_username }}" comment="{{ developer_realname }}" groups=wheel,wsrc append=yes
-    become_method: sudo
-    become: true
-
   - name: ensure root SSH keys are installed
     authorized_key: user=root key=https://github.com/{{ github_user }}.keys
-    become_method: sudo
-    become: true
-
-  - name: ensure user SSH keys are installed
-    authorized_key: user="{{ developer_username }}" key=https://github.com/{{ github_user }}.keys
     become_method: sudo
     become: true
 
@@ -48,6 +38,16 @@
     become_method: doas
     become: true
 
+  - name: /etc/installurl
+    lineinfile:
+      dest=/etc/pkg.conf
+      backup=yes
+      line="{{ pkg_path }}"
+      state=present
+      create=True
+    become_method: doas
+    become: true
+
   - name: install packages
     openbsd_pkg: name={{ item }} state=present
     with_items:
@@ -67,173 +67,21 @@
     become_method: doas
     become: true    
 
-  - name: .gitconfig
-    blockinfile:
-      dest: /home/{{ developer_username }}/.gitconfig
-      create: yes
-      owner: "{{ developer_username }}"
-      block: |
-        [user]
-                name = {{ developer_realname }}
-                email = {{ developer_email }}
+  #- name: Include the developer config tasks
+  #  import_tasks: developer_config.yml
 
-        [push]
-                default = simple
+  #- name: Include the dns and dhcp configuration tasks
+  #  import_tasks: dhcp_dns.yml
 
-        [color]
-                ui = true
-    become_method: doas
-    become: true
+  - name: Add the ports tree
+    import_tasks: openbsd63_ports.yml
 
-
-  - name: checkout Jess's dotfiles dotfiles
-    git:
-      repo: https://github.com/jessfraz/dotfiles.git
-      dest: "/home/{{ developer_username }}/dotfiles"
-      track_submodules: yes
-      recursive: yes
-      clone: yes
-      update: yes
-    become_method: doas
-    become: true
-
-  - name: .extra
-    blockinfile:
-      dest: /home/{{ developer_username }}/.extra
-      create: yes
-      owner: "{{ developer_username }}"
-      block: |
-        ###
-        ### Git credentials
-        ###
-
-        GIT_AUTHOR_NAME="{{ developer_realname }}"
-        GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
-        git config --global user.name "$GIT_AUTHOR_NAME"
-        GIT_AUTHOR_EMAIL="{{ developer_email }}"
-        GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
-        git config --global user.email "$GIT_AUTHOR_EMAIL"
-        GH_USER="{{ github_user }}"
-        git config --global github.user "$GH_USER"
-
-        ###
-        ### Gmail credentials for mutt
-        ###
-        export GMAIL={{ developer_email }}
-        export GMAIL_NAME="{{ developer_realname }}"
-        export GMAIL_FROM={{ developer_email }}
-    become_method: doas
-    become: true
-
-
-  - name: checkout Jess's vim config
-    git:
-      repo: https://github.com/jessfraz/.vim.git
-      dest: "/home/{{ developer_username }}/.vim"
-      track_submodules: yes
-      recursive: yes
-      clone: yes
-      update: yes
-      force: yes
-    become_method: doas
-    become: true
-
-      
-  - name: Update .vimrc
-    file:
-      src: /home/{{ developer_username }}/.vim/vimrc
-      dest: /home/{{ developer_username }}/.vimrc
-      owner: "{{ developer_username }}"
-      group: "{{ developer_username }}"
-      state: link
-    become_method: doas
-    become: true
-
-
-  - name: /etc/installurl
-    lineinfile:
-      dest=/etc/pkg.conf
-      backup=yes
-      line="{{ pkg_path }}"
-      state=present
-      create=True
-    become_method: doas
-    become: true
-
-  - name: Get the generator for our dns/dhcp files
-    git:
-      repo: https://github.com/alexlovelltroy/gendomains.git
-      dest: /tmp/gendomains
-      clone: yes
-      update: yes
-    become: true
-    become_method: doas
-    become_username: alt
-
-  - name: Use the generator to create our zone files and dhcpd
-    command: /tmp/gendomains/generate_zonefile.py Oren_Tirosh_Wordlist.txt internal.lovelltroy.net chdir=/tmp/gendomains/ creates=/tmp/gendomains/dhcpd.conf
-    become: true
-    become_method: doas
-    become_username: root
-
-  - name: Discover what the domain name is
-    shell: grep -w domain-name /tmp/gendomains/dhcpd.conf | grep -v servers |awk '{ print $3}' | sed 's/[\;"]//g'
-    register: internal_domain
-
-  - name: Discover what the octet is
-    shell: grep subnet /tmp/gendomains/dhcpd.conf | awk '{ print $2}' | sed s/192.168.//g | cut -f1 -d"."
-    register: random_octet
-
-  - name: Set the domain facts
-    set_fact:
-      internal_domain: "{{ internal_domain.stdout }}" 
-      random_octet: "{{ random_octet.stdout }}"
-
-  - name: Enable dhcpd
-    command: rcctl enable dhcpd
-    become: true
-    become_username: root
-    become_method: doas
-
-  - name: Template the unbound configuration file
-    template:
-      src: etc_files/unbound.conf.j2
-      dest: /var/unbound/etc/unbound.conf
-      owner: root
-      group: wheel
-      mode: 0644
-
-  - name: Enable unbound
-    command: rcctl enable unbound
-    become: true
-    become_username: root
-    become_method: doas
-
-  - name: Template the nsd configuration file
-    template:
-      src: etc_files/nsd.conf.j2
-      dest: /var/nsd/etc/unbound.conf
-      owner: root
-      group: _nsd
-      mode: 0644
-
-  - name: Move the zone files in to place
-    command: "/bin/sh -c 'cp /tmp/gendomains/*.zone /var/nsd/zones/'"
-
-  - name: Enable nsd
-    command: rcctl enable nsd
-    become: true
-    become_username: root
-    become_method: doas
+  - name: Configure the Firewall
+    import_tasks: firewall.yml
 
   - name: Enable tftpd
     command: rcctl enable tftpd
     become: true
-    become_username: root
     become_method: doas
 
-  - name: Enable ip forwarding
-    command: echo 'net.inet.ip.forwarding=1' >> /etc/sysctl.conf
-    become: true
-    become_method: doas
-    become_username: root
+
