@@ -1,6 +1,6 @@
 
   - name: add a new user
-    user: name="{{ developer_username }}" comment="{{ developer_realname }}" groups=wheel,wsrc append=yes
+    user: name="{{ developer_username }}" comment="{{ developer_realname }}" groups=wheel,wsrc append=yes shell="/usr/local/bin/bash"
     become_method: sudo
     become: true
 
@@ -24,18 +24,6 @@
 
         [color]
                 ui = true
-    become_method: doas
-    become: true
-
-
-  - name: checkout Jess's dotfiles dotfiles
-    git:
-      repo: https://github.com/jessfraz/dotfiles.git
-      dest: "/home/{{ developer_username }}/dotfiles"
-      track_submodules: yes
-      recursive: yes
-      clone: yes
-      update: yes
     become_method: doas
     become: true
 
@@ -64,29 +52,5 @@
         export GMAIL={{ developer_email }}
         export GMAIL_NAME="{{ developer_realname }}"
         export GMAIL_FROM={{ developer_email }}
-    become_method: doas
-    become: true
-
-
-  - name: checkout Jess's vim config
-    git:
-      repo: https://github.com/jessfraz/.vim.git
-      dest: "/home/{{ developer_username }}/.vim"
-      track_submodules: yes
-      recursive: yes
-      clone: yes
-      update: yes
-      force: yes
-    become_method: doas
-    become: true
-
-      
-  - name: Update .vimrc
-    file:
-      src: /home/{{ developer_username }}/.vim/vimrc
-      dest: /home/{{ developer_username }}/.vimrc
-      owner: "{{ developer_username }}"
-      group: "{{ developer_username }}"
-      state: link
     become_method: doas
     become: true

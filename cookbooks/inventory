@@ -1,2 +1,1 @@
-#router ansible_host=192.168.86.142 ansible_user=root ansible_connection=ssh ansible_python_interpreter=/usr/local/bin/python
-router ansible_host=192.168.5.50 ansible_user=root ansible_connection=ssh ansible_python_interpreter=/usr/local/bin/python
+router ansible_host=192.168.86.76 ansible_user=root ansible_connection=ssh ansible_python_interpreter=/usr/local/bin/python3

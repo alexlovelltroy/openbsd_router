@@ -10,6 +10,20 @@
       owner: root
       group: wheel
       mode: 0644
+    become: true
+    become_method: doas
+
+  - name: bogon mkdb script
+    copy: src='scripts/bogons_mkdb.sh' dest='/usr/local/bin/bogons_mkdb' owner='root' group='wheel' mode='a+x'
+
+  - name: create bogons db
+    command: /usr/local/bin/bogons_mkdb
+
+  - name: cron to update bogons db
+    cron:
+      name: 'update bogons db'
+      special_time: weekly
+      job: '/usr/local/bin/bogons_mkdb'
 
   - name: Get the route monitoring tool
     git:
@@ -26,50 +40,54 @@
        path: "{{item}}"
       register: folder_stats
       with_items:
-      - ["/var/db/rrd/pfstats","/var/db/rrd/health"]
+      - ["/var/db/rrd/pfstats","/var/db/rrd/health","/var/www/htdocs/internal/graphs/"]
     - name: "Creating multiple folders without disturbing previous permissions"
       file:
        path: "{{item.item}}"
        state: directory
        mode: 0755
-       group: root
+       group: wheel
        owner: root
       when: item.stat.exists == false
       with_items:
       - "{{folder_stats.results}}"    
 
   - name: Initialize the pfstats database
-    command: /var/rrdmon/pfstats/initialize_database.sh
+    command: "/usr/local/bin/bash /var/rrdmon/pfstats/initialize_database.sh"
+    become: true
+    become_method: doas
 
   - name: Initialize the health database
-    command: /var/rrdmon/health/initialize_database.sh
+    command: "/usr/local/bin/bash /var/rrdmon/health/initialize_database.sh"
+    become: true
+    become_method: doas
 
   - name: Create the cron job to update the pfstats database 
-     cron: 
-       job: "/var/rrdmon/pfstats/update_database.sh > /dev/null"
+    cron: 
+      job: "/usr/local/bin/bash /var/rrdmon/pfstats/update_database.sh > /dev/null"
 
   - name: Create the cron job to update the health database 
-     cron: 
-       job: "/var/rrdmon/health/update_database.sh > /dev/null"
+    cron: 
+      job: "/usr/local/bin/bash /var/rrdmon/health/update_database.sh > /dev/null"
 
   - name: Create the cron job to update the pfstats graph 
-     cron: 
-       job: "/var/rrdmon/pfstats/create_graphs.sh > /dev/null"
+    cron: 
+      job: "/usr/local/bin/bash /var/rrdmon/pfstats/create_graphs.sh > /dev/null"
 
   - name: Create the cron job to update the health graphs 
-     cron: 
-       job: "/var/rrdmon/health/create_graphs.sh > /dev/null"
+    cron: 
+       job: "/usr/local/bin/bash /var/rrdmon/health/create_graphs.sh > /dev/null"
 
   - name: Create the hostname files for em1,em2,em3,bridge0
-      copy: src=etc_files/{{ item }} dest=/etc/{{ item }} force=no
-      with_items:
-        - etc_files/hostname.em1
-        - etc_files/hostname.em2
-        - etc_files/hostname.em3
-        - etc_files/hostname.bridge0
+    copy: src=etc_files/{{ item }} dest=/etc/{{ item }} force=no
+    with_items:
+        - hostname.em1
+        - hostname.em2
+        - hostname.em3
+        - hostname.bridge0
         
   - name: Template the pflow interface
-      template:
+    template:
         src: etc_files/hostname.pflow0.j2
         dest: /etc/hostname.pflow0
         owner: root
@@ -77,7 +95,7 @@
         mode: 0644
 
   - name: Template the vether interface
-      template:
+    template:
         src: etc_files/hostname.vether0.j2
         dest: /etc/hostname.vether0
         owner: root

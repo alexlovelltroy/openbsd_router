@@ -3,17 +3,11 @@
   gather_facts: false
   remote_user: vagrant
 
-  vars:
-    mirror: "https://fastly.cdn.openbsd.org/pub/OpenBSD"
-    release: '6.3'
-    github_user: "alexlovelltroy"
-    developer_username: "alt"
-    developer_realname: "Alex Lovell-Troy"
-    developer_email: "alex@lovelltroy.org"
-    pkg_path: "{{ mirror }}/{{ release }}/packages/amd64/"
-    internal_domain: "placeholder"
-
   tasks:
+
+  - name: load settings
+    include_vars: "settings.yml"
+
   - name: ensure root SSH keys are installed
     authorized_key: user=root key=https://github.com/{{ github_user }}.keys
     become_method: sudo
@@ -63,25 +57,29 @@
         - zsh
         - mutt-1.9.4v3
         - gnupg-1.4.22p1
+        - rrdtool
+        - bash
+        - gawk
 
     become_method: doas
     become: true    
 
-  #- name: Include the developer config tasks
-  #  import_tasks: developer_config.yml
+  - name: Include the developer config tasks
+    import_tasks: developer_config.yml
 
-  #- name: Include the dns and dhcp configuration tasks
-  #  import_tasks: dhcp_dns.yml
+  - name: Include the dns and dhcp configuration tasks
+    import_tasks: dhcp_dns.yml
 
-  - name: Add the ports tree
-    import_tasks: openbsd63_ports.yml
+  #- name: Add the ports tree
+  #  import_tasks: openbsd63_ports.yml
 
   - name: Configure the Firewall
     import_tasks: firewall.yml
+
+  - name: install the sysctl.conf file
+    copy: src='etc_files/sysctl.conf' dest='/etc/sysctl.conf' owner='root' group='wheel' mode='a+r'
 
   - name: Enable tftpd
     command: rcctl enable tftpd
     become: true
     become_method: doas
-
-
